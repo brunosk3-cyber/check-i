@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-in L'auto Cargo - Versão Final</title>
+    <style>
+        :root { --primary: #004a99; --secondary: #e20613; --success: #28a745; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 10px; }
+        .app-container { max-width: 850px; margin: auto; background: white; border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { padding: 15px; border-bottom: 4px solid var(--primary); display: flex; justify-content: space-between; align-items: center; background: #fff; }
+        .logo-lauto { color: var(--primary); font-weight: 900; font-size: 1.2rem; }
+        .logo-pague { color: var(--secondary); font-weight: 700; font-size: 0.9rem; }
+        
+        .content { padding: 15px; }
+        .conferente-set { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .conferente-set input { padding: 12px; border-radius: 8px; border: 2px solid #ddd; outline: none; width: 100%; box-sizing: border-box; }
+
+        .config-section { background: #fff3cd; padding: 15px; border-radius: 10px; margin-bottom: 15px; display: none; border: 1px solid #ffeeba; }
+        .config-section textarea { width: 100%; height: 80px; margin-top: 8px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
+        .btn-config { background: #666; color: white; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-size: 0.8rem; margin-bottom: 10px; width: 100%; font-weight: bold; }
+
+        select { width: 100%; padding: 15px; border-radius: 10px; border: 2px solid var(--primary); font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; background: #fff; }
+        .lojas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 8px; margin-bottom: 20px; }
+        .loja-card { background: #f8f9fa; border: 1px solid #ddd; padding: 10px 2px; border-radius: 8px; text-align: center; font-size: 0.8rem; }
+        .loja-card.active { background: #d4edda; border-color: var(--success); font-weight: bold; }
+
+        input#barcodeInput { width: 100%; padding: 20px; font-size: 1.4rem; border: 3px solid var(--primary); border-radius: 12px; text-align: center; outline: none; box-sizing: border-box; background: #fff; }
+        
+        .actions-btn { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .btn-export { background: var(--success); color: white; padding: 15px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn-print { background: var(--primary); color: white; padding: 15px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.75rem; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
+        .btn-delete { color: var(--secondary); cursor: pointer; border: none; background: none; font-weight: bold; font-size: 1.1rem; }
+    </style>
+</head>
+<body onbeforeunload="return 'Sair agora apaga bipes não salvos!'">
+
+<div class="app-container" onclick="iniciarAudio()">
+    <div class="header">
+        <div><span class="logo-lauto">L'AUTO CARGO</span><br><span class="logo-pague">PAGUE MENOS</span></div>
+        <div id="totalBadge" style="background: var(--primary); color: white; padding: 10px 20px; border-radius: 50px; font-weight: 900; font-size: 1.2rem;">0</div>
+    </div>
+
+    <div class="content">
+        <button class="btn-config" onclick="toggleConfig()">⚙️ CONFIGURAR LOJAS DA ROTA</button>
+        
+        <div id="configSection" class="config-section">
+            <label><b>Editar Lojas (separe por vírgula):</b></label>
+            <textarea id="editLojasInput" onblur="salvarLojasManual()"></textarea>
+            <small>* Clique fora para salvar as alterações da rota selecionada.</small>
+        </div>
+
+        <div class="conferente-set">
+            <input type="text" id="confNome" placeholder="Nome do Conferente">
+            <input type="text" id="confMatricula" placeholder="Matrícula">
+        </div>
+
+        <select id="rotaSelect" onchange="aoMudarRota()">
+            <option value="ROTA 01">ROTA 01</option><option value="ROTA 02">ROTA 02</option>
+            <option value="ROTA 03">ROTA 03</option><option value="ROTA 04">ROTA 04</option>
+            <option value="ROTA 05">ROTA 05</option><option value="ROTA 06">ROTA 06</option>
+        </select>
+
+        <div id="pendencias" style="background:#fff3cd; padding:10px; border-radius:8px; margin-bottom:15px; font-size:0.85rem;"></div>
+        <div id="gridLojas" class="lojas-grid"></div>
+        
+        <input type="text" id="barcodeInput" placeholder="BIPE O CÓDIGO AQUI" autofocus>
+        
+        <div class="actions-btn">
+            <button class="btn-print" onclick="gerarRelatorioElegante()">📄 PDF POR ROTA/DATA</button>
+            <button class="btn-export" onclick="exportarCSV()">📊 EXCEL (CSV)</button>
+        </div>
+
+        <button onclick="limparSessao()" style="background:none; border:none; color:#bbb; width:100%; margin-top:30px; cursor:pointer; font-size: 0.7rem;">RESETAR TODA A MEMÓRIA</button>
+
+        <table>
+            <thead><tr><th>Data</th><th>Hora</th><th>Rota</th><th>Loja</th><th>Pedido</th><th>Excluir</th></tr></thead>
+            <tbody id="tabelaCorpo"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // LISTA DE ROTAS ORIGINAL (Padrão de fábrica do sistema)
+    const rotasOriginais = {
+        "ROTA 01": ["0898", "0702", "0953", "0836", "0859", "0785", "0255"],
+        "ROTA 02": ["0767", "0199", "0130", "0697", "1399", "7390", "0454", "1067", "1130", "1004", "0126", "0120", "0113", "1395", "0930"],
+        "ROTA 03": ["0695", "1220", "0998", "1434", "0696", "0119", "0635", "0430", "7386", "0208", "1421", "0149", "1041", "1201", "1019"],
+        "ROTA 04": ["1398", "0429", "0260", "1419", "1464", "0860", "7417", "1157", "0088", "7373", "0132", "0915", "0453", "1028", "1101"],
+        "ROTA 05": ["0536", "1459", "1302", "0952", "0146", "1252", "0272", "0145"],
+        "ROTA 06": ["0826", "1412", "0487", "1424", "0775", "0434"]
+    };
+
+    // Usando chave 'v4' para forçar a limpeza de bipes antigos
+    let bipesRealizados = JSON.parse(localStorage.getItem('bipes_lauto_v4')) || [];
+    let baseRotas = JSON.parse(localStorage.getItem('minhas_rotas_v4')) || rotasOriginais;
+    let audioCtx = null;
+
+    function iniciarAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+    function emitirSom(tipo) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        if (tipo === 'sucesso') {
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            document.body.style.backgroundColor = "#d4edda";
+        } else {
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+            document.body.style.backgroundColor = "#f8d7da";
+        }
+        setTimeout(() => document.body.style.backgroundColor = "#f4f7f6", 200);
+    }
+
+    function toggleConfig() {
+        const div = document.getElementById('configSection');
+        div.style.display = (div.style.display === 'block') ? 'none' : 'block';
+        if(div.style.display === 'block') {
+            const rotaSel = document.getElementById('rotaSelect').value;
+            document.getElementById('editLojasInput').value = baseRotas[rotaSel].join(', ');
+        }
+    }
+
+    function salvarLojasManual() {
+        const rotaSel = document.getElementById('rotaSelect').value;
+        const input = document.getElementById('editLojasInput').value;
+        baseRotas[rotaSel] = input.split(',').map(l => l.trim()).filter(l => l !== "");
+        localStorage.setItem('minhas_rotas_v4', JSON.stringify(baseRotas));
+        aoMudarRota();
+    }
+
+    function aoMudarRota() {
+        const rotaSel = document.getElementById('rotaSelect').value;
+        const lojasDaRota = baseRotas[rotaSel] || [];
+        const bipesNestaRota = bipesRealizados.filter(b => b.rota === rotaSel).map(b => b.loja);
+        const faltantes = lojasDaRota.filter(l => !bipesNestaRota.includes(l));
+        
+        document.getElementById('pendencias').innerHTML = faltantes.length > 0 ? 
+            `⚠️ <b>Faltam lojas na ${rotaSel}:</b> ${faltantes.join(', ')}` : `✅ Rota completa!`;
+
+        document.getElementById('gridLojas').innerHTML = lojasDaRota.map(loja => {
+            const qtd = bipesRealizados.filter(b => b.loja === loja && b.rota === rotaSel).length;
+            return `<div class="loja-card ${qtd > 0 ? 'active' : ''}"><b>${loja}</b><br>${qtd} vol</div>`;
+        }).join('');
+        
+        document.getElementById('totalBadge').innerText = bipesRealizados.length;
+    }
+
+    document.getElementById('barcodeInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const cod = e.target.value.trim();
+            if (cod.length < 10) { e.target.value = ''; return; }
+            
+            const rotaAtual = document.getElementById('rotaSelect').value;
+            let lojaId = null;
+            const lojasNaRota = baseRotas[rotaAtual];
+
+            // 1. Tenta posição padrão (11-15)
+            const padrao = cod.substring(11, 15);
+            if (lojasNaRota.includes(padrao)) {
+                lojaId = padrao;
+            } else {
+                // 2. Procura qualquer loja da rota dentro do código (Maior para menor)
+                for (let lj of [...lojasNaRota].sort((a,b) => b.length - a.length)) {
+                    if (cod.includes(lj)) { lojaId = lj; break; }
+                }
+            }
+
+            if (!lojaId) {
+                emitirSom('erro');
+                alert("LOJA NÃO PERTENCE À ROTA SELECIONADA!");
+            } else if (bipesRealizados.some(b => b.codigo === cod)) {
+                emitirSom('erro');
+                alert("CÓDIGO JÁ BIPADO!");
+            } else {
+                emitirSom('sucesso');
+                const agora = new Date();
+                bipesRealizados.push({ 
+                    data: agora.toLocaleDateString('pt-BR'), 
+                    hora: agora.toLocaleTimeString('pt-BR'), 
+                    rota: rotaAtual,
+                    loja: lojaId, 
+                    pedido: cod.substring(1, 8), 
+                    codigo: cod
+                });
+                localStorage.setItem('bipes_lauto_v4', JSON.stringify(bipesRealizados));
+                aoMudarRota(); atualizarTabela();
+            }
+            e.target.value = '';
+        }
+    });
+
+    function atualizarTabela() {
+        document.getElementById('tabelaCorpo').innerHTML = bipesRealizados.slice().reverse().map((b, i) => 
+            `<tr><td>${b.data}</td><td>${b.hora}</td><td>${b.rota}</td><td><b>${b.loja}</b></td><td>${b.pedido}</td>
+            <td><button class="btn-delete" onclick="removerItem(${i})">X</button></td></tr>`
+        ).join('');
+    }
+
+    function removerItem(idx) {
+        if (confirm("Remover este item?")) {
+            bipesRealizados.splice(bipesRealizados.length - 1 - idx, 1);
+            localStorage.setItem('bipes_lauto_v4', JSON.stringify(bipesRealizados));
+            aoMudarRota(); atualizarTabela();
+        }
+    }
+
+    function gerarRelatorioElegante() {
+        if (bipesRealizados.length === 0) return alert("Sem bipes!");
+        const nome = document.getElementById('confNome').value || "Não informado";
+        const matricula = document.getElementById('confMatricula').value || "Não informado";
+        
+        const bipesPorRota = bipesRealizados.reduce((acc, curr) => {
+            if (!acc[curr.rota]) acc[curr.rota] = [];
+            acc[curr.rota].push(curr);
+            return acc;
+        }, {});
+
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><style>
+                body { font-family: sans-serif; padding: 20px; }
+                .rota-section { border: 2px solid #004a99; border-radius: 8px; margin-bottom: 30px; page-break-inside: avoid; }
+                .rota-head { background: #004a99; color: white; padding: 10px; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
+            </style></head><body>
+                <h2>L'AUTO CARGO & PAGUE MENOS - RELATÓRIO</h2>
+                <p><b>Conferente:</b> ${nome} | <b>Matrícula:</b> ${matricula} | <b>Gerado em:</b> ${new Date().toLocaleString()}</p>
+                ${Object.keys(bipesPorRota).sort().map(rota => `
+                    <div class="rota-section">
+                        <div class="rota-head">${rota} - TOTAL: ${bipesPorRota[rota].length} VOL</div>
+                        <table>
+                            <thead><tr><th>Data</th><th>Hora</th><th>Loja</th><th>Pedido</th><th>Código Completo</th></tr></thead>
+                            <tbody>${bipesPorRota[rota].map(b => `<tr><td>${b.data}</td><td>${b.hora}</td><td><b>${b.loja}</b></td><td>${b.pedido}</td><td>${b.codigo}</td></tr>`).join('')}</tbody>
+                        </table>
+                    </div>
+                `).join('')}
+                <script>window.print();<\/script>
+            </body></html>
+        `);
+    }
+
+    function exportarCSV() {
+        let csv = "\ufeffDATA;HORA;ROTA;LOJA;PEDIDO;CODIGO\n";
+        bipesRealizados.forEach(b => csv += `${b.data};${b.hora};${b.rota};${b.loja};${b.pedido};${b.codigo}\n`);
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "Checkin_Lauto.csv";
+        a.click();
+    }
+
+    function limparSessao() {
+        if (confirm("ATENÇÃO: Isso apagará TODOS os bipes de todas as rotas!")) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
+
+    setInterval(() => {
+        if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) document.getElementById('barcodeInput').focus();
+    }, 3000);
+
+    aoMudarRota(); atualizarTabela();
+</script>
+</body>
+</html>
